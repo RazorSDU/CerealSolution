@@ -21,7 +21,7 @@ The API supports:
 ---
 
 ## Requirements
-- **.NET 6 or later** (if you're using ASP.NET Core 6+)
+- **.NET 8**
 - **SQL Server** or **LocalDB** (for the database)
 - **Visual Studio 2022** (recommended for development)
 
@@ -30,7 +30,7 @@ The API supports:
 ## Setup & Installation
 1. **Clone** this repository:
    ```bash
-   git clone https://github.com/YourUsername/CerealApi.git
+   git clone https://github.com/RazorSDU/CerealSolution.git
    ```
 2. **Open** `CerealApi.sln` in **Visual Studio 2022**.
 3. **Restore NuGet packages** (Visual Studio will do this automatically).
@@ -95,7 +95,7 @@ The API supports:
 
 ## Design Choices
 1. **ASP.NET Core Web API**  
-   - Chosen for simplicity, cross-platform development, and built-in support for MVC patterns.
+   - Chosen because of personal experience, and the stability of it.
 2. **Entity Framework Core**  
    - Simplifies database operations and migrations.  
    - Using **InMemory** mode for unit tests, and **SQL Server** or **LocalDB** for production.
@@ -112,12 +112,4 @@ The API supports:
 ---
 
 ## Contributing
-1. **Fork** the project, create a **feature branch**.
-2. **Commit** changes, then **create a pull request**.
-3. Ensure your code passes all **xUnit** tests.
-
----
-
-That’s it! For any questions or feedback, feel free to **open an issue** in this GitHub repository.
-
-**Happy Coding!**
+1. Please don't?
