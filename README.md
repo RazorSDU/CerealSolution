@@ -8,6 +8,8 @@ The API supports:
 - **Filtering** by nutritional values (calories, protein, etc.).
 - **Authentication & Authorization** for secured endpoints.
 - **Image retrieval** for cereals (with a fallback placeholder).
+- **Rate Limiting** to prevent excessive requests.
+- **Serilog logging** for detailed runtime diagnostics.
 
 ## Table of Contents
 1. [Requirements](#requirements)
@@ -16,6 +18,10 @@ The API supports:
 4. [API Endpoints](#api-endpoints)
 5. [Authentication](#authentication)
 6. [Design Choices](#design-choices)
+    - [EF Core Connections](#ef-core-connections)
+    - [Why Not a Singleton DbContext](#why-not-a-singleton-dbcontext)
+    - [Why a Factory Pattern Is Not Needed](#why-a-factory-pattern-is-not-needed)
+    - [Rate Limiting & HTTPS Enforcement](#rate-limiting--https-enforcement)
 7. [Contributing](#contributing)
 
 ---
@@ -54,6 +60,8 @@ The API supports:
    https://localhost:<PORT>/swagger
    ```
 4. **CSV Import** runs automatically at startup, parsing `Cereal.csv` into the DB if not already present.
+5. **HTTPS is enforced** in production to ensure secure data transmission.
+6. **Rate limiting** is enabled (in production and development) to prevent excessive requests.
 
 ---
 
@@ -94,22 +102,51 @@ The API supports:
 ---
 
 ## Design Choices
-1. **ASP.NET Core Web API**  
-   - Chosen because of personal experience, and the stability of it.
-2. **Entity Framework Core**  
-   - Simplifies database operations and migrations.  
-   - Using **InMemory** mode for unit tests, and **SQL Server** or **LocalDB** for production.
-3. **CSV Importer**  
-   - Automatically seeds cereals from `Cereal.csv` on app startup.  
-   - Allows adding or updating missing images or cereals.
-4. **Image Handling**  
-   - Stores **image paths** in the DB, actual files in `Data/Images`.  
-   - Returns a placeholder if no cereal-specific image is found.
-5. **Unit Tests**  
-   - **xUnit** test project to verify **CRUD operations**, **filtering**, and **authorization** logic.  
-   - Uses **Moq** for mocking and **EF Core InMemory** for testing DB interactions.
+
+### EF Core Connections
+**Why EF Opens and Closes Connections Often**  
+When EF Core executes a query or command, it briefly:
+- Opens a physical connection if none is open.
+- Executes the SQL.
+- Closes/disposes that logical connection when done.
+
+However, behind the scenes, **ADO.NET connection pooling** is usually caching these physical connections. So while EF logs that it’s “opening” or “closing” a connection, it’s not always a brand-new TCP connection to SQL Server. Instead, it’s often just grabbing a pooled connection and then returning it to the pool. This is normal and desired behavior.
+
+If you see a lot of open/close messages in your logs, that is often because you are logging at a **verbose** or **trace** level (like we do with Serilog). It can look noisy, but it’s typically not harmful to performance.
+
+### Why Not a Singleton DbContext
+1. **Thread Safety & Concurrency**  
+   EF Core’s **DbContext** is not thread-safe. A single context instance handling multiple requests simultaneously can cause concurrency issues, stale data, or worse.
+2. **Unit of Work / Lifetime**  
+   The recommended pattern in web apps is **per-request scoping**:
+   - Each HTTP request gets its own `DbContext`.
+   - At the end of the request, that `DbContext` is disposed.  
+   This ensures each request does its own “unit of work” in isolation.
+3. **Change Tracking Overload**  
+   If a DbContext lives too long, any entity you retrieve might remain in its change-tracking cache indefinitely, leading to memory bloat and unexpected behavior.
+4. **Connection Pooling**  
+   ADO.NET automatically handles pooling. You don’t need a single, never-closed connection to avoid overhead. The typical overhead of opening/closing in EF is just returning the connection to the pool.
+
+### Why a Factory Pattern Is Not Needed
+A factory pattern for creating multiple `DbContext` instances or repositories is useful in **complex** scenarios with multiple entities or varied database access patterns.  
+In this project, we are primarily dealing with **a single entity/table (`Cereal`)**. The built-in **Dependency Injection** with EF Core already provides:
+- Scoped `DbContext` creation per request
+- Automated disposal
+- Straightforward usage in controllers and services
+
+Hence, **no specialized factory** is necessary.
+
+### Rate Limiting & HTTPS Enforcement
+- **Rate Limiting**  
+  We use `AddRateLimiter` with a global IP-based rate limiter to prevent abuse. A short, fixed window helps demonstrate and test this feature easily. In production, the window and limit can be adjusted as needed.
+- **HTTPS Enforcement**  
+  - The app uses **`UseHttpsRedirection()`** in non-test environments to encourage secure connections.  
+  - **HSTS** is enabled in production.  
+  - Any plain `HTTP` request in production is blocked with a **`403 Forbidden`** response, ensuring data is transmitted securely.
 
 ---
 
 ## Contributing
-1. Please don't?
+1. Please don’t?  
+   - Currently, this is a personal/educational project.  
+   - If you want to fork and adapt it, go for it!
