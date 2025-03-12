@@ -3,7 +3,11 @@ using CerealApi.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
+using Serilog;
 using System.Linq;
+using System.Globalization;
+using System.IO;
+using System.Linq.Expressions;
 
 namespace CerealApi.Controllers
 {
@@ -12,10 +16,12 @@ namespace CerealApi.Controllers
     public class CerealController : ControllerBase
     {
         private readonly CerealContext _context;
+        private readonly ILogger<CerealController> _logger;
 
-        public CerealController(CerealContext context)
+        public CerealController(CerealContext context, ILogger<CerealController> logger)
         {
-            _context = context;
+            _context = context; // Now Scoped, reusing the same instance per request
+            _logger = logger;
         }
 
         /// <summary>
@@ -27,180 +33,167 @@ namespace CerealApi.Controllers
         /// </summary>
         [HttpGet]
         [AllowAnonymous]
-        public IActionResult GetAll([FromQuery] CerealQueryParams queryParams)
+        public IActionResult GetAll([FromQuery] CerealQueryParams queryParams,
+                           string? sortBy = null, bool sortDescending = false)
         {
+            _logger.LogTrace("GetAll called with queryParams: {@QueryParams}, sortBy: {SortBy}, sortDescending: {SortDescending}", queryParams, sortBy, sortDescending);
+
             try
             {
                 var query = _context.Cereals.AsQueryable();
 
                 // 1. Partial match (case-insensitive)
-
-                // Name
                 if (!string.IsNullOrWhiteSpace(queryParams.Name))
                 {
-                    var nameLower = queryParams.Name.ToLower();
-                    query = query.Where(c => c.Name.ToLower().Contains(nameLower));
+                    _logger.LogDebug("Filtering cereals by Name containing: {Name}", queryParams.Name);
+                    query = query.Where(c => c.Name.ToLower().Contains(queryParams.Name.ToLower()));
                 }
 
                 // 2. Exact match (case-insensitive)
-
-                //Manufacturer
                 if (!string.IsNullOrWhiteSpace(queryParams.Mfr))
                 {
-                    var mfrLower = queryParams.Mfr.ToLower();
-                    query = query.Where(c => c.Mfr.ToLower() == mfrLower);
+                    _logger.LogDebug("Filtering cereals by Manufacturer: {Mfr}", queryParams.Mfr);
+                    query = query.Where(c => c.Mfr.ToLower() == queryParams.Mfr.ToLower());
                 }
 
-                // C/H , Cold/Hotg
                 if (!string.IsNullOrWhiteSpace(queryParams.Type))
                 {
-                    var typeLower = queryParams.Type.ToLower();
-                    query = query.Where(c => c.Type.ToLower() == typeLower);
+                    _logger.LogDebug("Filtering cereals by Type: {Type}", queryParams.Type);
+                    query = query.Where(c => c.Type.ToLower() == queryParams.Type.ToLower());
                 }
 
                 // 3. Range-based filters for numeric fields
-
-                // Calories
                 if (queryParams.CaloriesMin.HasValue)
                 {
+                    _logger.LogDebug("Filtering cereals with Calories >= {CaloriesMin}", queryParams.CaloriesMin.Value);
                     query = query.Where(c => c.Calories >= queryParams.CaloriesMin.Value);
                 }
                 if (queryParams.CaloriesMax.HasValue)
                 {
+                    _logger.LogDebug("Filtering cereals with Calories <= {CaloriesMax}", queryParams.CaloriesMax.Value);
                     query = query.Where(c => c.Calories <= queryParams.CaloriesMax.Value);
                 }
 
-                // Protein
                 if (queryParams.ProteinMin.HasValue)
                 {
+                    _logger.LogDebug("Filtering cereals with Protein >= {ProteinMin}", queryParams.ProteinMin.Value);
                     query = query.Where(c => c.Protein >= queryParams.ProteinMin.Value);
                 }
                 if (queryParams.ProteinMax.HasValue)
                 {
+                    _logger.LogDebug("Filtering cereals with Protein <= {ProteinMax}", queryParams.ProteinMax.Value);
                     query = query.Where(c => c.Protein <= queryParams.ProteinMax.Value);
                 }
 
-                // Fat
                 if (queryParams.FatMin.HasValue)
                 {
+                    _logger.LogDebug("Filtering cereals with Fat >= {FatMin}", queryParams.FatMin.Value);
                     query = query.Where(c => c.Fat >= queryParams.FatMin.Value);
                 }
                 if (queryParams.FatMax.HasValue)
                 {
+                    _logger.LogDebug("Filtering cereals with Fat <= {FatMax}", queryParams.FatMax.Value);
                     query = query.Where(c => c.Fat <= queryParams.FatMax.Value);
                 }
 
-                // Sodium
                 if (queryParams.SodiumMin.HasValue)
                 {
+                    _logger.LogDebug("Filtering cereals with Sodium >= {SodiumMin}", queryParams.SodiumMin.Value);
                     query = query.Where(c => c.Sodium >= queryParams.SodiumMin.Value);
                 }
                 if (queryParams.SodiumMax.HasValue)
                 {
+                    _logger.LogDebug("Filtering cereals with Sodium <= {SodiumMax}", queryParams.SodiumMax.Value);
                     query = query.Where(c => c.Sodium <= queryParams.SodiumMax.Value);
                 }
 
-                // Fiber
                 if (queryParams.FiberMin.HasValue)
                 {
+                    _logger.LogDebug("Filtering cereals with Fiber >= {FiberMin}", queryParams.FiberMin.Value);
                     query = query.Where(c => c.Fiber >= queryParams.FiberMin.Value);
                 }
                 if (queryParams.FiberMax.HasValue)
                 {
+                    _logger.LogDebug("Filtering cereals with Fiber <= {FiberMax}", queryParams.FiberMax.Value);
                     query = query.Where(c => c.Fiber <= queryParams.FiberMax.Value);
                 }
 
-                // Carbo
                 if (queryParams.CarboMin.HasValue)
                 {
+                    _logger.LogDebug("Filtering cereals with Carbohydrates >= {CarboMin}", queryParams.CarboMin.Value);
                     query = query.Where(c => c.Carbo >= queryParams.CarboMin.Value);
                 }
                 if (queryParams.CarboMax.HasValue)
                 {
+                    _logger.LogDebug("Filtering cereals with Carbohydrates <= {CarboMax}", queryParams.CarboMax.Value);
                     query = query.Where(c => c.Carbo <= queryParams.CarboMax.Value);
                 }
 
-                // Sugars
                 if (queryParams.SugarsMin.HasValue)
                 {
+                    _logger.LogDebug("Filtering cereals with Sugars >= {SugarsMin}", queryParams.SugarsMin.Value);
                     query = query.Where(c => c.Sugars >= queryParams.SugarsMin.Value);
                 }
                 if (queryParams.SugarsMax.HasValue)
                 {
+                    _logger.LogDebug("Filtering cereals with Sugars <= {SugarsMax}", queryParams.SugarsMax.Value);
                     query = query.Where(c => c.Sugars <= queryParams.SugarsMax.Value);
                 }
 
-                // Potass
-                if (queryParams.PotassMin.HasValue)
-                {
-                    query = query.Where(c => c.Potass >= queryParams.PotassMin.Value);
-                }
-                if (queryParams.PotassMax.HasValue)
-                {
-                    query = query.Where(c => c.Potass <= queryParams.PotassMax.Value);
-                }
-
-                // Vitamins
-                if (queryParams.VitaminsMin.HasValue)
-                {
-                    query = query.Where(c => c.Vitamins >= queryParams.VitaminsMin.Value);
-                }
-                if (queryParams.VitaminsMax.HasValue)
-                {
-                    query = query.Where(c => c.Vitamins <= queryParams.VitaminsMax.Value);
-                }
-
-                // Shelf
-                if (queryParams.ShelfMin.HasValue)
-                {
-                    query = query.Where(c => c.Shelf >= queryParams.ShelfMin.Value);
-                }
-                if (queryParams.ShelfMax.HasValue)
-                {
-                    query = query.Where(c => c.Shelf <= queryParams.ShelfMax.Value);
-                }
-
-                // Weight
-                if (queryParams.WeightMin.HasValue)
-                {
-                    query = query.Where(c => c.Weight >= queryParams.WeightMin.Value);
-                }
-                if (queryParams.WeightMax.HasValue)
-                {
-                    query = query.Where(c => c.Weight <= queryParams.WeightMax.Value);
-                }
-
-                // Cups
-                if (queryParams.CupsMin.HasValue)
-                {
-                    query = query.Where(c => c.Cups >= queryParams.CupsMin.Value);
-                }
-                if (queryParams.CupsMax.HasValue)
-                {
-                    query = query.Where(c => c.Cups <= queryParams.CupsMax.Value);
-                }
-
-                // Rating
                 if (queryParams.RatingMin.HasValue)
                 {
+                    _logger.LogDebug("Filtering cereals with Rating >= {RatingMin}", queryParams.RatingMin.Value);
                     query = query.Where(c => c.Rating >= queryParams.RatingMin.Value);
                 }
                 if (queryParams.RatingMax.HasValue)
                 {
+                    _logger.LogDebug("Filtering cereals with Rating <= {RatingMax}", queryParams.RatingMax.Value);
                     query = query.Where(c => c.Rating <= queryParams.RatingMax.Value);
                 }
 
-                // Finalize and execute the query
+                // --- Sorting ---
+                if (!string.IsNullOrWhiteSpace(sortBy))
+                {
+                    _logger.LogDebug("Sorting cereals by {SortBy}, Descending: {SortDescending}", sortBy, sortDescending);
+
+                    query = sortBy.ToLower() switch
+                    {
+                        "name" => sortDescending ? query.OrderByDescending(c => c.Name) : query.OrderBy(c => c.Name),
+                        "mfr" => sortDescending ? query.OrderByDescending(c => c.Mfr) : query.OrderBy(c => c.Mfr),
+                        "type" => sortDescending ? query.OrderByDescending(c => c.Type) : query.OrderBy(c => c.Type),
+                        "calories" => sortDescending ? query.OrderByDescending(c => c.Calories) : query.OrderBy(c => c.Calories),
+                        "protein" => sortDescending ? query.OrderByDescending(c => c.Protein) : query.OrderBy(c => c.Protein),
+                        "fat" => sortDescending ? query.OrderByDescending(c => c.Fat) : query.OrderBy(c => c.Fat),
+                        "sodium" => sortDescending ? query.OrderByDescending(c => c.Sodium) : query.OrderBy(c => c.Sodium),
+                        "fiber" => sortDescending ? query.OrderByDescending(c => c.Fiber) : query.OrderBy(c => c.Fiber),
+                        "carbo" => sortDescending ? query.OrderByDescending(c => c.Carbo) : query.OrderBy(c => c.Carbo),
+                        "sugars" => sortDescending ? query.OrderByDescending(c => c.Sugars) : query.OrderBy(c => c.Sugars),
+                        "rating" => sortDescending ? query.OrderByDescending(c => c.Rating) : query.OrderBy(c => c.Rating),
+                        _ => query.OrderBy(c => c.Id), // Default sorting
+                    };
+                }
+
+                // Execute query and get results
                 var results = query.ToList();
+
+                if (results.Count == 0)
+                {
+                    _logger.LogWarning("No cereals found matching the filters provided.");
+                }
+                else
+                {
+                    _logger.LogInformation("Retrieved {Count} cereals from the database.", results.Count);
+                }
 
                 return Ok(results);
             }
             catch (Exception ex)
             {
-                // Log ex if you have a logging mechanism
-                return StatusCode(500, $"Internal server error: {ex.Message}");
+                _logger.LogError(ex, "Error retrieving cereals from the database.");
+                return StatusCode(500, "Internal server error.");
             }
         }
+
 
         /// <summary>
         /// GET a cereal by ID
@@ -210,18 +203,24 @@ namespace CerealApi.Controllers
         [AllowAnonymous]
         public IActionResult GetById(int id)
         {
+            _logger.LogTrace("GetById called with ID: {Id}", id);
+
             try
             {
                 var cereal = _context.Cereals.Find(id);
                 if (cereal == null)
                 {
+                    _logger.LogWarning("Cereal with ID {Id} not found.", id);
                     return NotFound($"Cereal with ID {id} not found.");
                 }
+
+                _logger.LogInformation("Cereal with ID {Id} retrieved successfully.", id);
                 return Ok(cereal);
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Internal server error: {ex.Message}");
+                _logger.LogError(ex, "Error retrieving cereal with ID {Id}", id);
+                return StatusCode(500, "Internal server error.");
             }
         }
 
@@ -232,9 +231,11 @@ namespace CerealApi.Controllers
         [Authorize]
         public IActionResult Create([FromBody] Cereal newCereal)
         {
-            // Check if the user is authenticated (unit test workaround)
+            _logger.LogTrace("Create method called with data: {@NewCereal}", newCereal);
+
             if (!User.Identity.IsAuthenticated)
             {
+                _logger.LogWarning("Unauthorized user attempted to create a cereal.");
                 return Unauthorized();
             }
 
@@ -242,29 +243,30 @@ namespace CerealApi.Controllers
             {
                 if (newCereal == null)
                 {
+                    _logger.LogError("Cereal data is null.");
                     return BadRequest("Cereal data is null.");
                 }
 
-                // CASE 1: If no ID is provided (Id == 0), create a new cereal
+                // CASE 1: Create a new cereal if no ID is provided
                 if (newCereal.Id == 0)
                 {
                     _context.Cereals.Add(newCereal);
                     _context.SaveChanges();
 
+                    _logger.LogInformation("Cereal created successfully with ID {Id}.", newCereal.Id);
                     return CreatedAtAction(nameof(GetById), new { id = newCereal.Id }, newCereal);
                 }
 
-                // CASE 2: If the user provides an ID (Id != 0),
-                //         check if that cereal exists in the database
+                // CASE 2: Check if the cereal exists before updating
                 var existingCereal = _context.Cereals.Find(newCereal.Id);
 
-                // If it doesn't exist, return an error (can't pick arbitrary IDs for new cereals)
                 if (existingCereal == null)
                 {
+                    _logger.LogWarning("Cereal with ID {Id} not found for update.", newCereal.Id);
                     return BadRequest($"Cereal with ID {newCereal.Id} does not exist. ID cannot be chosen manually for creation.");
                 }
 
-                // If it exists, update the existing record
+                // Update existing cereal
                 existingCereal.Name = newCereal.Name;
                 existingCereal.Mfr = newCereal.Mfr;
                 existingCereal.Type = newCereal.Type;
@@ -286,14 +288,15 @@ namespace CerealApi.Controllers
                 _context.Entry(existingCereal).State = EntityState.Modified;
                 _context.SaveChanges();
 
+                _logger.LogInformation("Cereal with ID {Id} updated successfully.", newCereal.Id);
                 return Ok(existingCereal);
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Internal server error: {ex.Message}");
+                _logger.LogError(ex, "Error creating or updating cereal.");
+                return StatusCode(500, "Internal server error.");
             }
         }
-
 
         /// <summary>
         /// PUT update an existing cereal by ID.
@@ -302,10 +305,11 @@ namespace CerealApi.Controllers
         [Authorize]
         public IActionResult Update(int id, [FromBody] Cereal updatedCereal)
         {
+            _logger.LogTrace("Update method called for ID {Id} with data: {@UpdatedCereal}", id, updatedCereal);
 
-            // Check if the user is authenticated (unit test workaround)
             if (!User.Identity.IsAuthenticated)
             {
+                _logger.LogWarning("Unauthorized user attempted to update a cereal.");
                 return Unauthorized();
             }
 
@@ -313,56 +317,61 @@ namespace CerealApi.Controllers
             {
                 if (updatedCereal == null || id != updatedCereal.Id)
                 {
+                    _logger.LogError("Update failed due to invalid data or ID mismatch. ID: {Id}", id);
                     return BadRequest("Cereal data is invalid or ID mismatch.");
                 }
 
-                var existing = _context.Cereals.Find(id);
-                if (existing == null)
+                var existingCereal = _context.Cereals.Find(id);
+                if (existingCereal == null)
                 {
+                    _logger.LogWarning("Cereal with ID {Id} not found for update.", id);
                     return NotFound($"Cereal with ID {id} not found.");
                 }
 
                 // Update the fields you want to allow changes to
-                existing.Name = updatedCereal.Name;
-                existing.Mfr = updatedCereal.Mfr;
-                existing.Type = updatedCereal.Type;
-                existing.Calories = updatedCereal.Calories;
-                existing.Protein = updatedCereal.Protein;
-                existing.Fat = updatedCereal.Fat;
-                existing.Sodium = updatedCereal.Sodium;
-                existing.Fiber = updatedCereal.Fiber;
-                existing.Carbo = updatedCereal.Carbo;
-                existing.Sugars = updatedCereal.Sugars;
-                existing.Potass = updatedCereal.Potass;
-                existing.Vitamins = updatedCereal.Vitamins;
-                existing.Shelf = updatedCereal.Shelf;
-                existing.Weight = updatedCereal.Weight;
-                existing.Cups = updatedCereal.Cups;
-                existing.Rating = updatedCereal.Rating;
-                existing.ImagePath = updatedCereal.ImagePath;
+                existingCereal.Name = updatedCereal.Name;
+                existingCereal.Mfr = updatedCereal.Mfr;
+                existingCereal.Type = updatedCereal.Type;
+                existingCereal.Calories = updatedCereal.Calories;
+                existingCereal.Protein = updatedCereal.Protein;
+                existingCereal.Fat = updatedCereal.Fat;
+                existingCereal.Sodium = updatedCereal.Sodium;
+                existingCereal.Fiber = updatedCereal.Fiber;
+                existingCereal.Carbo = updatedCereal.Carbo;
+                existingCereal.Sugars = updatedCereal.Sugars;
+                existingCereal.Potass = updatedCereal.Potass;
+                existingCereal.Vitamins = updatedCereal.Vitamins;
+                existingCereal.Shelf = updatedCereal.Shelf;
+                existingCereal.Weight = updatedCereal.Weight;
+                existingCereal.Cups = updatedCereal.Cups;
+                existingCereal.Rating = updatedCereal.Rating;
+                existingCereal.ImagePath = updatedCereal.ImagePath;
 
-                _context.Entry(existing).State = EntityState.Modified;
+                _context.Entry(existingCereal).State = EntityState.Modified;
                 _context.SaveChanges();
 
-                return Ok(existing);
+                _logger.LogInformation("Cereal with ID {Id} updated successfully.", id);
+                return Ok(existingCereal);
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Internal server error: {ex.Message}");
+                _logger.LogError(ex, "Error updating cereal with ID {Id}", id);
+                return StatusCode(500, "Internal server error.");
             }
         }
 
         /// <summary>
-        /// DELETE an existing cereal by ID.
+        /// DELETE a cereal by ID.
         /// </summary>
         [HttpDelete("{id}")]
         [Authorize]
         public IActionResult Delete(int id)
         {
+            _logger.LogTrace("Delete method called for ID: {Id}", id);
 
-            // Check if the user is authenticated (unit test workaround)
             if (!User.Identity.IsAuthenticated)
             {
+                _logger.LogWarning("Unauthorized user attempted to delete a cereal.");
                 return Unauthorized();
             }
 
@@ -371,17 +380,20 @@ namespace CerealApi.Controllers
                 var cereal = _context.Cereals.Find(id);
                 if (cereal == null)
                 {
+                    _logger.LogWarning("Cereal with ID {Id} not found for deletion.", id);
                     return NotFound($"Cereal with ID {id} not found.");
                 }
 
                 _context.Cereals.Remove(cereal);
                 _context.SaveChanges();
 
+                _logger.LogInformation("Cereal with ID {Id} deleted successfully.", id);
                 return NoContent();
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Internal server error: {ex.Message}");
+                _logger.LogError(ex, "Error deleting cereal with ID {Id}.", id);
+                return StatusCode(500, "Internal server error.");
             }
         }
 
@@ -395,10 +407,13 @@ namespace CerealApi.Controllers
         [AllowAnonymous]
         public IActionResult GetImage(int id)
         {
+            _logger.LogTrace("GetImage called for ID: {Id}", id);
+
             var cereal = _context.Cereals.Find(id);
 
             if (cereal == null)
             {
+                _logger.LogWarning("Cereal with ID {Id} not found.", id);
                 return NotFound($"Cereal with ID {id} not found.");
             }
 
@@ -407,12 +422,14 @@ namespace CerealApi.Controllers
             // 1. Check if the cereal has an existing ImagePath in the database
             if (!string.IsNullOrEmpty(cereal.ImagePath))
             {
+                _logger.LogDebug("Checking for image at path: {ImagePath}", cereal.ImagePath);
                 cerealImagePath = FindExistingImage(cereal.ImagePath);
             }
 
             // 2. If a valid cereal image exists, return it
             if (cerealImagePath != null)
             {
+                _logger.LogInformation("Returning image for cereal ID {Id}: {ImagePath}", id, cerealImagePath);
                 return File(System.IO.File.ReadAllBytes(cerealImagePath), GetMimeType(cerealImagePath));
             }
 
@@ -421,10 +438,12 @@ namespace CerealApi.Controllers
 
             if (placeholderPath != null)
             {
+                _logger.LogDebug("Returning placeholder image for cereal ID {Id}.", id);
                 return File(System.IO.File.ReadAllBytes(placeholderPath), GetMimeType(placeholderPath));
             }
 
             // 4. If neither exists, return 404
+            _logger.LogWarning("No image found for cereal ID {Id}.", id);
             return NotFound("Image not found.");
         }
 
@@ -434,6 +453,8 @@ namespace CerealApi.Controllers
         /// </summary>
         private string? FindExistingImage(string basePath)
         {
+            _logger.LogTrace("FindExistingImage called for basePath: {BasePath}", basePath);
+
             string[] allowedExtensions = { ".jpg", ".jpeg", ".png" };
 
             // Check if the given path already has an extension (avoid double appending)
@@ -441,7 +462,11 @@ namespace CerealApi.Controllers
             if (!string.IsNullOrEmpty(fileExtension))
             {
                 string fullPath = Path.Combine(Directory.GetCurrentDirectory(), basePath);
-                return System.IO.File.Exists(fullPath) ? fullPath : null;
+                if (System.IO.File.Exists(fullPath))
+                {
+                    _logger.LogDebug("Found image with direct path: {FullPath}", fullPath);
+                    return fullPath;
+                }
             }
 
             // If no extension, try common image formats
@@ -450,9 +475,12 @@ namespace CerealApi.Controllers
                 string fullPath = Path.Combine(Directory.GetCurrentDirectory(), $"{basePath}{ext}");
                 if (System.IO.File.Exists(fullPath))
                 {
+                    _logger.LogDebug("Found image with extension {Ext}: {FullPath}", ext, fullPath);
                     return fullPath;
                 }
             }
+
+            _logger.LogWarning("No image found for basePath: {BasePath}", basePath);
             return null;
         }
 
@@ -463,12 +491,15 @@ namespace CerealApi.Controllers
         private string GetMimeType(string filePath)
         {
             string extension = Path.GetExtension(filePath).ToLowerInvariant();
-            return extension switch
+            string mimeType = extension switch
             {
                 ".png" => "image/png",
                 ".jpg" or ".jpeg" => "image/jpeg",
                 _ => "application/octet-stream"
             };
+
+            _logger.LogTrace("GetMimeType called for file: {FilePath}, resolved MIME type: {MimeType}", filePath, mimeType);
+            return mimeType;
         }
 
     }

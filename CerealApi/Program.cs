@@ -4,15 +4,44 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Serilog;
+using Serilog.Events;
 using System.Text;
+// Add these for rate limiting
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-builder.Services.AddDbContext<CerealContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("CerealDatabase")));
+// --- DB context setup ---
+builder.Services.AddDbContextPool<CerealContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("CerealDatabase"),
+    sqlOptions =>
+    {
+        sqlOptions.EnableRetryOnFailure(5);
+    }));
 
-// Configure JWT Authentication
+// --- Serilog Setup ---
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Verbose()
+    .WriteTo.Logger(lc => lc.Filter.ByIncludingOnly(e => e.Level == LogEventLevel.Verbose)
+        .WriteTo.File("Logs/trace.log"))
+    .WriteTo.Logger(lc => lc.Filter.ByIncludingOnly(e => e.Level == LogEventLevel.Debug)
+        .WriteTo.File("Logs/debug.log"))
+    .WriteTo.Logger(lc => lc.Filter.ByIncludingOnly(e => e.Level == LogEventLevel.Information)
+        .WriteTo.File("Logs/info.log"))
+    .WriteTo.Logger(lc => lc.Filter.ByIncludingOnly(e => e.Level == LogEventLevel.Warning)
+        .WriteTo.File("Logs/warn.log"))
+    .WriteTo.Logger(lc => lc.Filter.ByIncludingOnly(e => e.Level == LogEventLevel.Error)
+        .WriteTo.File("Logs/error.log"))
+    .WriteTo.Logger(lc => lc.Filter.ByIncludingOnly(e => e.Level == LogEventLevel.Fatal)
+        .WriteTo.File("Logs/fatal.log"))
+    .WriteTo.File("Logs/combined.log")
+    .CreateLogger();
+
+builder.Host.UseSerilog();
+
+// --- JWT Auth ---
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var secretKey = jwtSettings["SecretKey"];
 var issuer = jwtSettings["Issuer"];
@@ -25,7 +54,7 @@ builder.Services.AddAuthentication(options =>
 })
 .AddJwtBearer(options =>
 {
-    options.RequireHttpsMetadata = false; // For development only
+    options.RequireHttpsMetadata = false; // For dev
     options.SaveToken = true;
     options.TokenValidationParameters = new TokenValidationParameters
     {
@@ -39,16 +68,13 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-// Add controllers
 builder.Services.AddControllers();
 
-// Configure Swagger with JWT Bearer Authentication
+// --- Swagger ---
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "Cereal API", Version = "v1" });
-
-    // Add JWT Authentication to Swagger UI
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
@@ -56,7 +82,7 @@ builder.Services.AddSwaggerGen(c =>
         Scheme = "Bearer",
         BearerFormat = "JWT",
         In = ParameterLocation.Header,
-        Description = "Enter 'Bearer {your JWT token}' below. Example: Bearer eyJhbG...",
+        Description = "Enter 'Bearer {token}'...",
     });
 
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
@@ -64,43 +90,69 @@ builder.Services.AddSwaggerGen(c =>
         {
             new OpenApiSecurityScheme
             {
-                Reference = new OpenApiReference
-                {
-                    Type = ReferenceType.SecurityScheme,
-                    Id = "Bearer"
-                }
+                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
             },
-            new string[] {} // No specific scopes required
+            new string[] {}
         }
     });
 });
 
+// --- Rate Limiter (Partition by IP) ---
+builder.Services.AddRateLimiter(options =>
+{
+    // If you want a “global” IP-based limiter:
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+    {
+        var remoteIp = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(remoteIp, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 100,                    // e.g. 100 requests
+            Window = TimeSpan.FromMinutes(15),    // per 15 min window
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+            QueueLimit = 2
+        });
+    });
+
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+});
+
 var app = builder.Build();
 
-// Seed data if the database is empty
+// -- Migrate & Seed if empty --
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<CerealContext>();
-    db.Database.Migrate(); // Ensure the database is created and up-to-date
+    db.Database.Migrate();
 
-    // Define paths for the CSV and images
     var csvPath = Path.Combine(builder.Environment.ContentRootPath, "Data", "Cereal.csv");
     var imagesFolderPath = Path.Combine(builder.Environment.ContentRootPath, "Data", "Images");
 
-    // Run import (only if DB is empty)
     CsvImporter.ImportCereals(csvPath, imagesFolderPath, db);
 }
 
-// Configure the HTTP request pipeline.
+// Ensure logs folder
+Directory.CreateDirectory("Logs");
+
+// Configure pipeline
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
+app.UseSerilogRequestLogging(); // Each incoming HTTP request is logged
 app.UseHttpsRedirection();
 
-app.UseAuthentication(); // Ensure authentication middleware is used
+// If not development, use HSTS
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHsts();
+}
+
+// Use Rate Limiter globally
+app.UseRateLimiter();
+
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();

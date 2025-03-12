@@ -13,6 +13,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.Extensions.Logging;
 
 namespace CerealApi.Tests
 {
@@ -20,6 +21,7 @@ namespace CerealApi.Tests
     {
         private readonly CerealContext _context;
         private readonly CerealController _controller;
+        private readonly Mock<ILogger<CerealController>> _mockLogger;
 
         public CerealControllerTests()
         {
@@ -40,7 +42,11 @@ namespace CerealApi.Tests
             });
             _context.SaveChanges();
 
-            _controller = new CerealController(_context);
+            // Initialize Mock Logger
+            _mockLogger = new Mock<ILogger<CerealController>>();
+
+            // Pass Mock Logger to Controller
+            _controller = new CerealController(_context, _mockLogger.Object);
 
             // By default, no user is authenticated (simulate endpoints that allow anonymous GET)
             var httpContext = new DefaultHttpContext();

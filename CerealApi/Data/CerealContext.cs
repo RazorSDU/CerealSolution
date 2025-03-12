@@ -5,9 +5,9 @@ namespace CerealApi.Data
 {
     public class CerealContext : DbContext
     {
-        public CerealContext(DbContextOptions<CerealContext> options)
-            : base(options)
+        public CerealContext(DbContextOptions<CerealContext> options) : base(options)
         {
+            ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking; // Improves performance
         }
 
         public DbSet<Cereal> Cereals { get; set; } = null!;
