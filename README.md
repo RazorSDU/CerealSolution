@@ -6,6 +6,7 @@ The API supports:
 
 - **CRUD operations** (Create, Read, Update, Delete) on a `Cereal` entity.
 - **Filtering** by nutritional values (calories, protein, etc.).
+- **Sorting** also by nutritional values (calories, protein, etc.).
 - **Authentication & Authorization** for secured endpoints.
 - **Image retrieval** for cereals (with a fallback placeholder).
 - **Rate Limiting** to prevent excessive requests.
