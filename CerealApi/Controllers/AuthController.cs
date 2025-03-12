@@ -7,6 +7,7 @@ using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Text;
 using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 
 namespace CerealApi.Controllers
 {
@@ -32,6 +33,7 @@ namespace CerealApi.Controllers
         /// }
         /// </summary>
         [HttpPost("register")]
+        [Authorize]
         public IActionResult Register([FromBody] UserRegisterDto request)
         {
             // 1) Check if user already exists

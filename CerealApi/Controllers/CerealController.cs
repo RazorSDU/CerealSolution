@@ -398,6 +398,44 @@ namespace CerealApi.Controllers
         }
 
         /// <summary>
+        /// DELETE all cereals from the database.
+        /// </summary>
+        [HttpDelete("all")]
+        [Authorize]
+        public IActionResult DeleteAll()
+        {
+            _logger.LogTrace("DeleteAll method called.");
+
+            if (!User.Identity.IsAuthenticated)
+            {
+                _logger.LogWarning("Unauthorized user attempted to delete all cereals.");
+                return Unauthorized();
+            }
+
+            try
+            {
+                var allCereals = _context.Cereals.ToList();
+                if (!allCereals.Any())
+                {
+                    _logger.LogWarning("No cereals found for deletion.");
+                    return NotFound("No cereals found in the database.");
+                }
+
+                _context.Cereals.RemoveRange(allCereals);
+                _context.SaveChanges();
+
+                _logger.LogInformation("All cereals deleted successfully. Count: {Count}", allCereals.Count);
+                return NoContent();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting all cereals.");
+                return StatusCode(500, "Internal server error.");
+            }
+        }
+
+
+        /// <summary>
         /// GET an image by cereal ID.
         /// Dynamically detects image format (JPG, PNG).
         /// Returns the cereal-specific image if available, otherwise the placeholder.

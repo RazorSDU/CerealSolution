@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Linq;
+using System.Globalization;
 using CerealApi.Models;
 using CerealApi.Data;
 
@@ -16,9 +17,10 @@ namespace CerealApi.Helpers
             int addedCount = 0;  // Track newly added cereals
             int updatedCount = 0; // Track cereals that had missing images and got updated
 
-            for (int i = 2; i < lines.Length; i++) // Start at index 2 to skip headers
+            // Start at index 2 to skip the two header lines
+            for (int i = 2; i < lines.Length; i++)
             {
-                var row = lines[i].Split(';'); // Updated to match CSV delimiter
+                var row = lines[i].Split(';');
 
                 // Ensure the row has exactly 16 columns before processing
                 if (row.Length != 16)
@@ -43,32 +45,61 @@ namespace CerealApi.Helpers
                         existingCereal.ImagePath = imageFilePath;
                         updatedCount++;
                     }
-                    continue; // Skip adding a duplicate cereal
+                    // Skip adding a duplicate cereal
+                    continue;
                 }
 
-                // Create a new cereal entry
+                // Attempt to parse and create a new cereal entry
                 try
                 {
+                    int calories = int.Parse(row[3]);
+                    int protein = int.Parse(row[4]);
+                    int fat = int.Parse(row[5]);
+                    int sodium = int.Parse(row[6]);
+                    float fiber = float.Parse(row[7], CultureInfo.InvariantCulture);
+                    float carbo = float.Parse(row[8], CultureInfo.InvariantCulture);
+                    int sugars = int.Parse(row[9]);
+
+                    // Potassium fix: if the CSV has -1, use 0
+                    int potassRaw = int.Parse(row[10]);
+                    int potass = (potassRaw < 0) ? 0 : potassRaw;
+
+                    int vitamins = int.Parse(row[11]);
+                    int shelf = int.Parse(row[12]);
+                    float weight = float.Parse(row[13], CultureInfo.InvariantCulture);
+                    float cups = float.Parse(row[14], CultureInfo.InvariantCulture);
+
+                    // Fix the rating string so that only the first period is treated as decimal,
+                    // removing any subsequent periods
+                    string rawRating = row[15].Trim();
+                    rawRating = FixRatingDecimalFormat(rawRating);
+
+                    // Parse the corrected float
+                    float originalRating = float.Parse(rawRating, CultureInfo.InvariantCulture);
+
+                    // Convert from approximately 0–100 scale to 0–5 stars
+                    float fiveStarRating = originalRating / 20f;
+                    // Optionally round to 2 decimals
+                    fiveStarRating = (float)Math.Round(fiveStarRating, 2);
+
                     var cereal = new Cereal
                     {
                         Name = cerealName,
                         Mfr = row[1].Trim(),
                         Type = row[2].Trim(),
-                        Calories = int.Parse(row[3]),
-                        Protein = int.Parse(row[4]),
-                        Fat = int.Parse(row[5]),
-                        Sodium = int.Parse(row[6]),
-                        Fiber = float.Parse(row[7]),
-                        Carbo = float.Parse(row[8]),
-                        Sugars = int.Parse(row[9]),
-                        Potass = int.Parse(row[10]),
-                        Vitamins = int.Parse(row[11]),
-                        Shelf = int.Parse(row[12]),
-                        Weight = float.Parse(row[13]),
-                        Cups = float.Parse(row[14]),
-                        Rating = float.Parse(row[15]),
-
-                        // Store the found image path if available
+                        Calories = calories,
+                        Protein = protein,
+                        Fat = fat,
+                        Sodium = sodium,
+                        Fiber = fiber,
+                        Carbo = carbo,
+                        Sugars = sugars,
+                        Potass = potass,
+                        Vitamins = vitamins,
+                        Shelf = shelf,
+                        Weight = weight,
+                        Cups = cups,
+                        Rating = fiveStarRating,
                         ImagePath = imageFilePath
                     };
 
@@ -92,6 +123,30 @@ namespace CerealApi.Helpers
             {
                 Console.WriteLine("No new cereals added or updated.");
             }
+        }
+
+        /// <summary>
+        /// Interprets the *first* period as the decimal separator and removes
+        /// all subsequent periods. Example:
+        ///   "93.704.912" => "93.704912" => parse => ~93.704912
+        /// </summary>
+        private static string FixRatingDecimalFormat(string ratingStr)
+        {
+            // Find the index of the first '.'
+            int firstDotIndex = ratingStr.IndexOf('.');
+            if (firstDotIndex == -1)
+            {
+                // No '.' at all; just return as-is
+                return ratingStr;
+            }
+
+            // Everything before the first '.'
+            string prefix = ratingStr.Substring(0, firstDotIndex);
+            // The rest (everything after the first '.'), removing *all* '.' from it
+            string suffix = ratingStr.Substring(firstDotIndex + 1).Replace(".", "");
+
+            // Combine with exactly one '.' in the middle
+            return prefix + "." + suffix;
         }
 
         /// <summary>
