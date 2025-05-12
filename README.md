@@ -147,6 +147,49 @@ Hence, **no specialized factory** is necessary.
 
 ---
 
+# CerealApi — secure, filter-first cereal REST API  
+> Full-stack .NET 8 service that exposes a filterable cereal catalogue with JWT auth, rate-limiting & Serilog diagnostics.
+
+---
+
+## 🛠 Tech Stack & Skills Demonstrated
+| Area | Stack / Library | Highlights shown in this project |
+|------|-----------------|-----------------------------------|
+| API | **ASP.NET Core 8** Web API | Attribute-routed controllers, Swagger docs |
+| Data Layer | **Entity Framework Core** + SQL Server | Pooling, retry-on-failure, CSV seeding |
+| Security | **JWT Bearer**, BCrypt, HTTPS-only | Role claims, 403 HTTP blocking, global filters |
+| Observability | **Serilog** | Per-level rolling logs, request tracing |
+| Resilience | **ASP.NET RateLimiting** | Fixed-window limiter & test overrides |
+| Testing | `WebApplicationFactory` (integration) | Program class split for test hosting |
+| Dev UX | **Swagger UI** | Live contract & try-it endpoints |
+| Tooling | `dotnet` CLI | One-command build, run, migrate |
+
+## ✨ What the App Does
+### Core Functionality
+* **CRUD & Query**: `/api/cereal` exposes filtering on 25+ fields (`CaloriesMin`, `RatingMax`…) plus
+  dynamic sorting.
+* **Auth Flow**: `/api/auth/login` returns a signed JWT; protected endpoints require `Bearer {token}`.
+* **Rate Limiting**: 5 requests / 10 s per IP (disabled in integration tests).
+
+### Visuals & UX
+* Interactive **Swagger UI** served on HTTPS for dev/test environments.
+* Descriptive error codes (400, 401, 403, 429) with JSON messages.
+
+### Engineering Features
+* **HTTPS-enforced** middleware with selective bypass for dedicated test envs.
+* Automatic DB **migrations & CSV import** at startup, including image path patch-ups.
+* Structured logs split by level (`trace.log`, `error.log`, etc.) for easy triage.
+
+## 🏃 Running Locally
+> **Prerequisites:** .NET 8 SDK, SQL Server (LocalDB works out-of-the-box)
+
+```bash
+# clone & start API with seeded data
+git clone https://github.com/your-handle/CerealApi.git
+cd CerealApi
+dotnet ef database update          # applies migrations
+dotnet run --project CerealApi     # launches on https://localhost:5001
+
 ## Contributing
 1. Please don’t?  
    - Currently, this is a personal/educational project.  
